@@ -13,7 +13,7 @@ pub enum GameModeArg {
 
 /// Gomoku
 #[derive(Parser, Debug)]
-#[command(name = "gomoku_rust", version = "0.1.0", about = "Gomoku in Rust")]
+#[command(name = "gomoku_rust", version = "0.1.0")]
 pub struct CliArgs {
   /// Game mode
   #[arg(long, value_enum, default_value_t=GameModeArg::HumanHuman)]

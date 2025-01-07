@@ -168,8 +168,10 @@ impl Game {
 
             // Place stone (Enter / Space)
             GameAction::PlaceStone => {
-              // Check if the cell is free
-              self.turn(player.player_type);
+              if self.board.board[self.cursor_y + 1][self.cursor_x + 1] == 0 {
+                // Check if the cell is free
+                self.turn(player.player_type);
+              }
             }
 
             GameAction::None => {
@@ -210,21 +212,21 @@ impl Game {
   }
 
   fn human_turn(&mut self) {
-    if self.board.board[self.cursor_y][self.cursor_x] == 0 {
-      self.board.put(self.cursor_y, self.cursor_x, self.current_role);
-    }
+    self.board.put(self.cursor_y, self.cursor_x, self.current_role);
   }
 
   fn ai_turn(&mut self) {
     let (value, move_xy, _path) = if self.current_role == self.player1.role {
-      self.ai1.search_move(&mut self.board, self.current_role, self.ai1.depth)
+      self.ai1.make_move(&mut self.board, self.current_role)
     } else {
-      self.ai2.search_move(&mut self.board, self.current_role, self.ai2.depth)
+      self.ai2.make_move(&mut self.board, self.current_role)
     };
     let msg = format!("AI ({:?}) chose move with score={}", self.current_role, value);
     self.ui.show_message(&msg);
     if let Some((r, c)) = move_xy {
       self.board.put(r, c, self.current_role);
+    } else {
+      self.ui.show_message("AI chose no move");
     }
   }
 

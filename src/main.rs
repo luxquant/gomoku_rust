@@ -4,6 +4,7 @@ mod cache;
 mod cli;
 mod game;
 mod player;
+mod shapes;
 mod terminal_ui;
 mod zobrist_cache;
 

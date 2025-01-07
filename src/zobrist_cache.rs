@@ -1,6 +1,7 @@
 use rand::Rng;
 
 /// Structure for storing the Zobrist table and the current hash.
+#[derive(Clone)]
 pub struct ZobristCache {
   /// Two-dimensional table: zobrist_table[x][y] = [u64; 2],
   /// where index 0 corresponds to role=1 (black),

@@ -1,13 +1,13 @@
 use crossterm::{
   cursor::{Hide, MoveTo, Show},
-  event::{read, Event, KeyCode, KeyEvent, KeyModifiers},
+  event::{read, Event, KeyCode, KeyEvent},
   execute,
   style::{Color, Print, ResetColor, SetForegroundColor},
   terminal::{disable_raw_mode, enable_raw_mode, size, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
 use crate::board::Board;
-use std::io::{stdout, Result as IoResult, Write}; // Note, we take Result as IoResult
+use std::io::{stdout, Result as IoResult}; // Note, we take Result as IoResult
 
 // Definition of the GameAction enum for various actions in the game
 #[derive(Debug)]
@@ -127,8 +127,8 @@ impl TerminalUI {
     let (cols, rows) = size().unwrap_or((80, 24));
 
     let bsize = board.size as u16;
-    let cell_width: u16 = 2;
-    let used_width = bsize * cell_width;
+    let cell_width: u16 = 3; // Увеличиваем ширину ячейки для добавления пробела
+    let used_width = bsize * cell_width - 1;
     let used_height = bsize;
 
     // Calculate offsets for centering
@@ -142,23 +142,31 @@ impl TerminalUI {
       execute!(stdout_, MoveTo(0, row), Print(" ".repeat(cols as usize))).ok();
     }
 
-    // Draw cells
-    for i in 0..board.size {
-      for j in 0..board.size {
+    // Draw top border with special characters
+    execute!(stdout_, MoveTo(offset_x, offset_y - 1), Print("╔")).ok();
+    for _ in 0..used_width {
+      execute!(stdout_, Print("═")).ok();
+    }
+    execute!(stdout_, Print("╗")).ok();
+
+    // Draw cells with side borders
+    for i in 1..=board.size {
+      execute!(stdout_, MoveTo(offset_x, offset_y + (i as u16) - 1), Print("║")).ok();
+      for j in 1..=board.size {
         let stone = board.board[i][j]; // 1=O, -1=X, 0=empty
                                        // Determine if coloring is needed
-        let sx = offset_x + (j as u16) * cell_width;
-        let sy = offset_y + (i as u16);
+        let sx = offset_x + ((j - 1) as u16) * cell_width + 1;
+        let sy = offset_y + ((i - 1) as u16);
 
         // Check if this position is the last placed stone
         let is_last_stone = if let (Some(lx), Some(ly)) = (last_stone_x, last_stone_y) {
-          lx == j && ly == i
+          lx == j - 1 && ly == i - 1
         } else {
           false
         };
 
         // Check if the cursor is here
-        let is_cursor = (j == cursor_x) && (i == cursor_y);
+        let is_cursor = (j - 1 == cursor_x) && (i - 1 == cursor_y);
 
         // We will print either 'X', 'O', or '.'.
         // But if the cursor is on an occupied cell, we need to "highlight" the figure.
@@ -209,8 +217,18 @@ impl TerminalUI {
           // Without color
           execute!(stdout_, MoveTo(sx, sy), Print(symbol)).ok();
         }
+        // Добавляем пробел между ячейками
+        execute!(stdout_, Print(" ")).ok();
       }
+      execute!(stdout_, Print("║")).ok();
     }
+
+    // Draw bottom border with special characters
+    execute!(stdout_, MoveTo(offset_x, offset_y + used_height), Print("╚")).ok();
+    for _ in 0..used_width {
+      execute!(stdout_, Print("═")).ok();
+    }
+    execute!(stdout_, Print("╝")).ok();
 
     // After drawing the board – output the saved message again
     // (so that the line is not overwritten)
