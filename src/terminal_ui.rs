@@ -1,144 +1,219 @@
 use crossterm::{
+  cursor::{Hide, MoveTo, Show},
+  event::{read, Event, KeyCode, KeyEvent, KeyModifiers},
   execute,
-  terminal::{EnterAlternateScreen, LeaveAlternateScreen, enable_raw_mode, disable_raw_mode, size},
-  cursor::{Hide, Show, MoveTo},
-  event::{read, Event, KeyEvent, KeyCode, KeyModifiers},
-  style::Print,
+  style::{Color, Print, ResetColor, SetForegroundColor},
+  terminal::{disable_raw_mode, enable_raw_mode, size, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
-use std::io::{stdout, Write, Result as IoResult}; // Note, we take Result as IoResult
 use crate::board::Board;
+use std::io::{stdout, Result as IoResult, Write}; // Note, we take Result as IoResult
 
 // Definition of the GameAction enum for various actions in the game
 #[derive(Debug)]
 pub enum GameAction {
-  None,          // No action
-  Quit,          // Quit the game
-  TogglePause,   // Toggle pause
-  Undo,          // Undo action
-  Redo,          // Redo action
-  MoveLeft,      // Move left
-  MoveRight,     // Move right
-  MoveUp,        // Move up
-  MoveDown,      // Move down
-  PlaceStone,    // Place stone
+  None,        // No action
+  Quit,        // Quit the game
+  TogglePause, // Toggle pause
+  Undo,        // Undo action
+  Redo,        // Redo action
+  MoveLeft,    // Move left
+  MoveRight,   // Move right
+  MoveUp,      // Move up
+  MoveDown,    // Move down
+  PlaceStone,  // Place stone
 }
 
 // Structure for the terminal user interface
-pub struct TerminalUI;
+pub struct TerminalUI {
+  /// Store the last message to be displayed on the bottom line.
+  last_message: String,
+}
 
 impl TerminalUI {
+  /// "Light green" for the cursor, RGB value
+  const CURSOR_COLOR: Color = Color::Rgb { r: 120, g: 255, b: 120 };
+  /// "Light red" for the last stone, RGB value
+  const LAST_STONE_COLOR: Color = Color::Rgb { r: 255, g: 140, b: 140 };
+
   // Constructor for creating a new instance of TerminalUI
   pub fn new() -> Self {
-      Self
+    Self {
+      last_message: String::new(), // Initially an empty string
+    }
   }
 
   // Initialization of the terminal screen
   pub fn init_screen(&mut self) -> IoResult<()> {
-      enable_raw_mode()?; // Enable raw input mode
-      execute!(stdout(), EnterAlternateScreen, Hide)?; // Enter alternate screen and hide cursor
-      Ok(())
+    enable_raw_mode()?; // Enable raw input mode
+    execute!(stdout(), EnterAlternateScreen, Hide)?; // Enter alternate screen and hide cursor
+    Ok(())
   }
 
   // Restore the terminal state
   pub fn restore_terminal(&mut self) -> IoResult<()> {
-      execute!(stdout(), Show, LeaveAlternateScreen)?; // Show cursor and leave alternate screen
-      disable_raw_mode()?; // Disable raw input mode
-      Ok(())
+    execute!(stdout(), Show, LeaveAlternateScreen)?; // Show cursor and leave alternate screen
+    disable_raw_mode()?; // Disable raw input mode
+    Ok(())
   }
 
   // Read user input and determine the action
   pub fn read_input(&mut self) -> GameAction {
-      if let Ok(ev) = read() { // Read event
-          match ev {
-              Event::Key(KeyEvent { code, .. }) => { // Handle key event
-                  match code {
-                      KeyCode::Esc | KeyCode::Char('q') => {
-                          return GameAction::Quit; // Quit the game
-                      }
-                      KeyCode::Char('p') => {
-                          return GameAction::TogglePause; // Toggle pause
-                      }
-                      KeyCode::Backspace => {
-                          return GameAction::Undo; // Undo action
-                      }
-                      KeyCode::Tab => {
-                          return GameAction::Redo; // Redo action
-                      }
-                      KeyCode::Left => return GameAction::MoveLeft, // Move left
-                      KeyCode::Right => return GameAction::MoveRight, // Move right
-                      KeyCode::Up => return GameAction::MoveUp, // Move up
-                      KeyCode::Down => return GameAction::MoveDown, // Move down
-                      KeyCode::Enter | KeyCode::Char(' ') => {
-                          return GameAction::PlaceStone; // Place stone
-                      }
-                      _ => {}
-                  }
-              }
-              _ => {}
+    if let Ok(ev) = read() {
+      // Read event
+      match ev {
+        Event::Key(KeyEvent { code, .. }) => {
+          // Handle key event
+          match code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+              return GameAction::Quit; // Quit the game
+            }
+            KeyCode::Char('p') => {
+              return GameAction::TogglePause; // Toggle pause
+            }
+            KeyCode::Backspace => {
+              return GameAction::Undo; // Undo action
+            }
+            KeyCode::Tab => {
+              return GameAction::Redo; // Redo action
+            }
+            KeyCode::Left => return GameAction::MoveLeft,   // Move left
+            KeyCode::Right => return GameAction::MoveRight, // Move right
+            KeyCode::Up => return GameAction::MoveUp,       // Move up
+            KeyCode::Down => return GameAction::MoveDown,   // Move down
+            KeyCode::Enter | KeyCode::Char(' ') => {
+              return GameAction::PlaceStone; // Place stone
+            }
+            _ => {}
           }
+        }
+        _ => {}
       }
-      GameAction::None // No action
+    }
+    GameAction::None // No action
   }
 
-  // Display a message at the bottom of the screen
+  /// Set (and immediately draw) a new message
   pub fn show_message(&mut self, msg: &str) {
-      let (_cols, rows) = size().unwrap_or((80, 24)); // Get terminal size
-      let y = rows.saturating_sub(1); // Determine the row for message display
-      execute!(stdout(), MoveTo(0, y), Print(" ".repeat(80))).ok(); // Clear the line
-      let (_cols, rows) = size().unwrap_or((80, 24));
-      let y = rows.saturating_sub(1);
-      execute!(stdout(), MoveTo(0, y), Print(" ".repeat(80))).ok();
-      execute!(stdout(), MoveTo(0, y), Print(msg)).ok();
+    // Save to the field
+    self.last_message = msg.to_string();
+    // Draw
+    self.draw_message();
   }
 
-  pub fn draw_board(&mut self, board: &Board, cursor_x: usize, cursor_y: usize) {
-      let (cols, rows) = size().unwrap_or((80, 24));
+  /// Actually output `self.last_message` on the bottom line
+  fn draw_message(&mut self) {
+    let (cols, rows) = size().unwrap_or((80, 24));
+    let y = rows.saturating_sub(2); // Print the message on the line above
 
-      let bsize = board.size as u16;
-      let cell_width: u16 = 2;
-      let used_width = bsize * cell_width;
-      let used_height = bsize;
+    // Center the message
+    let msg_len = self.last_message.len() as u16;
+    let x = if cols > msg_len { (cols - msg_len) / 2 } else { 0 };
 
-      let offset_x = if cols > used_width {
-          (cols - used_width) / 2
-      } else {
-          0
-      };
-      let offset_y = if rows > used_height {
-          (rows - used_height) / 2
-      } else {
-          0
-      };
+    // Clear the line (cols number of spaces)
+    execute!(stdout(), MoveTo(0, y), Print(" ".repeat(cols as usize))).ok();
+    // Print the message
+    execute!(stdout(), MoveTo(x, y), Print(&self.last_message)).ok();
+  }
 
-      let mut stdout_ = stdout();
+  pub fn draw_board(
+    &mut self,
+    board: &Board,
+    cursor_x: usize,
+    cursor_y: usize,
+    last_stone_x: Option<usize>,
+    last_stone_y: Option<usize>,
+  ) {
+    let (cols, rows) = size().unwrap_or((80, 24));
 
-      // Clear the screen
-      for row in 0..rows {
-          execute!(stdout_, MoveTo(0, row), Print(" ".repeat(cols as usize))).ok();
-      }
+    let bsize = board.size as u16;
+    let cell_width: u16 = 2;
+    let used_width = bsize * cell_width;
+    let used_height = bsize;
 
-      // Draw cells
-      for i in 0..board.size {
-          for j in 0..board.size {
-              let cell = board.board[i][j];
-              let ch = match cell {
-                  1 => "O",
-                  -1 => "X",
-                  _ => ".",
-              };
-              let sx = offset_x + (j as u16) * cell_width;
-              let sy = offset_y + (i as u16);
+    // Calculate offsets for centering
+    let offset_x = if cols > used_width { (cols - used_width) / 2 } else { 0 };
+    let offset_y = if rows > used_height { (rows - used_height) / 2 } else { 0 };
 
-              execute!(stdout_, MoveTo(sx, sy), Print(ch)).ok();
+    let mut stdout_ = stdout();
+
+    // Clear only the part where the board will be (optional: can clear the entire screen)
+    for row in 0..rows {
+      execute!(stdout_, MoveTo(0, row), Print(" ".repeat(cols as usize))).ok();
+    }
+
+    // Draw cells
+    for i in 0..board.size {
+      for j in 0..board.size {
+        let stone = board.board[i][j]; // 1=O, -1=X, 0=empty
+                                       // Determine if coloring is needed
+        let sx = offset_x + (j as u16) * cell_width;
+        let sy = offset_y + (i as u16);
+
+        // Check if this position is the last placed stone
+        let is_last_stone = if let (Some(lx), Some(ly)) = (last_stone_x, last_stone_y) {
+          lx == j && ly == i
+        } else {
+          false
+        };
+
+        // Check if the cursor is here
+        let is_cursor = (j == cursor_x) && (i == cursor_y);
+
+        // We will print either 'X', 'O', or '.'.
+        // But if the cursor is on an occupied cell, we need to "highlight" the figure.
+        // If the cursor is on an empty cell, we place a "+".
+        let (symbol, color) = match stone {
+          1 => {
+            // Stone 'O'
+            if is_cursor {
+              // Hovered over O => make "O" green
+              ("O", Some(Self::CURSOR_COLOR))
+            } else if is_last_stone {
+              // Last stone 'O'
+              ("O", Some(Self::LAST_STONE_COLOR))
+            } else {
+              // Regular O (white or no special color)
+              ("O", None)
+            }
           }
-      }
+          -1 => {
+            // Stone 'X'
+            if is_cursor {
+              // Hovered over X => make "X" green
+              ("X", Some(Self::CURSOR_COLOR))
+            } else if is_last_stone {
+              ("X", Some(Self::LAST_STONE_COLOR))
+            } else {
+              ("X", None)
+            }
+          }
+          0 => {
+            // Empty cell
+            if is_cursor {
+              // Cursor here => plus sign in green
+              ("+", Some(Self::CURSOR_COLOR))
+            } else {
+              // Just "."
+              (".", None)
+            }
+          }
+          _ => ("?", None), // just in case
+        };
 
-      // Draw cursor
-      if cursor_x < board.size && cursor_y < board.size {
-          let cur_sx = offset_x + (cursor_x as u16) * cell_width;
-          let cur_sy = offset_y + (cursor_y as u16);
-          execute!(stdout_, MoveTo(cur_sx, cur_sy), Print("+")).ok();
+        // Print
+        if let Some(col) = color {
+          // Set the required color, print the symbol, reset the color
+          execute!(stdout_, MoveTo(sx, sy), SetForegroundColor(col), Print(symbol), ResetColor).ok();
+        } else {
+          // Without color
+          execute!(stdout_, MoveTo(sx, sy), Print(symbol)).ok();
+        }
       }
+    }
+
+    // After drawing the board – output the saved message again
+    // (so that the line is not overwritten)
+    self.draw_message();
   }
 }
