@@ -1,0 +1,8 @@
+[package]
+name = "gomoku_rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossterm = "0.28.1"
+clap = { version = "4.5.23", features = ["derive"] } 

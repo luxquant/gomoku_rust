@@ -1,0 +1,31 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Shape {
+  FIVE,
+  BLOCK_FIVE,
+
+  OPEN_FOUR,
+  SEMIOPEN_FOUR,
+  CLOSED_FOUR,
+  FOUR_FOUR,
+  FOUR_THREE,
+
+  OPEN_THREE,
+  SEMIOPEN_THREE,
+  CLOSED_THREE,
+  THREE_THREE,
+  SPLIT_THREE,
+
+  OPEN_TWO,
+  SEMIOPEN_TWO,
+  CLOSED_TWO,
+  TWO_TWO,
+
+  OPEN_ONE,
+  SEMIOPEN_ONE,
+  CLOSED_ONE,
+
+  DOUBLE_THREAT,
+  CROSS_THREAT,
+
+  NONE,
+}
