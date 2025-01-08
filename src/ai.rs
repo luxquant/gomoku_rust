@@ -1,9 +1,9 @@
 use crate::board::Board;
 use crate::cache::Cache;
 use crate::player::Role;
-use crate::shapes::shape;
+use log::{debug, info};
 
-pub const MAX: i32 = 100000000;
+pub const MAX: i32 = 100_000_000;
 
 /// Structure to account for cache statistics
 #[derive(Debug, Default)]
@@ -30,7 +30,6 @@ pub struct AIEngine {
 
   cache: Cache<u64, CacheEntry>,
 
-  // Equivalent to `private onlyThreeThreshold: number;` in TS
   only_three_threshold: i32,
 }
 
@@ -45,7 +44,6 @@ impl AIEngine {
     }
   }
 
-  /// Analog of the TS method `analyze(...)`
   #[allow(clippy::too_many_arguments)]
   fn analyze(
     &mut self,
@@ -60,38 +58,34 @@ impl AIEngine {
     beta: i32,
   ) -> (i32, Option<(usize, usize)>, Vec<(usize, usize)>) {
     self.cache_hits.search += 1;
+    info!(
+      "AI analyze {:?} {:?} {:?} depth={:?} сdepth={:?} {:?}",
+      only_three, only_four, role, depth, cdepth, path
+    );
 
     // 1) Base exit conditions
     if cdepth >= depth || board.is_game_over() {
       let score = board.evaluate(role);
+      info!("Base exit: depth={}, score={}", cdepth, score);
       return (score, None, path.clone());
     }
 
     // 2) Cache check
     let hash_val = board.hash();
     if let Some(prev) = self.cache.get(&hash_val) {
-      // Assume that `prev` returns as some structure/enum
-      // which stores:
-      //   - prev.value: i32
-      //   - prev.role: i32
-      //   - prev.depth: i32
-      //   - prev.move_xy: Option<(usize, usize)>
-      //   - prev.only_three: bool
-      //   - prev.only_four: bool
-      //   - prev.path: Vec<(usize, usize)>
       if prev.role == role {
         let depth_left = depth - cdepth;
-        if (prev.value.abs() >= shape::FIVE || prev.depth >= depth_left)
+        if (prev.value.abs() >= 10_000_000 || prev.depth >= depth_left)
           && prev.only_three == only_three
           && prev.only_four == only_four
         {
           self.cache_hits.hit += 1;
           let new_path = {
-            // path + prev.path
             let mut p = path.clone();
             p.extend_from_slice(&prev.path);
             p
           };
+          debug!("Cache hit: depth={}, value={}", prev.depth, prev.value);
           return (prev.value, prev.move_xy, new_path);
         }
       }
@@ -105,8 +99,10 @@ impl AIEngine {
 
     // 4) Generate "valuable" moves
     let points = board.get_valuable_moves(role, cdepth, only_three || cdepth > self.only_three_threshold, only_four);
+    info!("AI points {:?}", points);
     if points.is_empty() {
       let score = board.evaluate(role);
+      debug!("No valuable moves: score={}", score);
       return (score, None, path.clone());
     }
 
@@ -120,7 +116,7 @@ impl AIEngine {
         // Add move to path
         path.push((px, py));
 
-        let (mut eval_score, _eval_move, mut eval_path) = self.analyze(
+        let (mut eval_score, _eval_move, eval_path) = self.analyze(
           only_three,
           only_four,
           board,
@@ -139,9 +135,11 @@ impl AIEngine {
         // Return to own role
         eval_score = -eval_score;
 
+        info!("AI eval_score {:?} {:?} {:?}", eval_score, d, depth);
+
         // 8) Compare with maximum
-        if eval_score >= shape::FIVE || d == depth {
-          if eval_score > value || (eval_score <= -shape::FIVE && value <= -shape::FIVE && eval_path.len() as i32 > best_depth) {
+        if eval_score >= 10_000_000 || d == depth {
+          if eval_score > value || (eval_score <= -10_000_000 && value <= -10_000_000 && eval_path.len() as i32 > best_depth) {
             value = eval_score;
             best_path = eval_path.clone();
             best_depth = best_path.len() as i32;
@@ -151,7 +149,7 @@ impl AIEngine {
 
         // 9) Alpha-beta
         alpha = alpha.max(value);
-        if alpha >= shape::FIVE {
+        if alpha >= 10_000_000 {
           break 'depthLoop;
         }
         if alpha >= beta {
@@ -161,16 +159,12 @@ impl AIEngine {
     }
 
     // 10) Save to cache (if needed)
-    //    (In TS: if ((cDepth < self.onlyThreeThreshold || onlyThree || onlyFour) && ...)
     let depth_left = depth - cdepth;
     let do_put = (cdepth < self.only_three_threshold as i32) || only_three || only_four;
     if do_put {
-      // form structure for storage
-      // path for cache: cut best_path, but usually "bestPath.slice(cDepth)"
       let sliced_path = {
         let mut p = Vec::new();
         if best_path.len() as i32 >= cdepth {
-          // cdepth is index
           let idx = cdepth as usize;
           p.extend_from_slice(&best_path[idx..]);
         }
@@ -192,6 +186,7 @@ impl AIEngine {
       self.cache_hits.total += 1;
     }
 
+    info!("Analyze result: best_move={:?}, depth={}, value={}", best_move, cdepth, value);
     (value, best_move, best_path)
   }
 
@@ -202,16 +197,16 @@ impl AIEngine {
     //    similar to "let [value, move, path] = this.analyze(true, false, ...)"
     let mut path_buf = vec![];
     let (mut value, mut mv, mut path) = self.analyze(true, false, board, role, vct_depth, 0, &mut path_buf, -MAX, MAX);
-
+    info!("AI first analyze {:?} {:?} {:?}", value, mv, path);
     // If the score >= SCORES.FIVE => direct return
-    if value >= shape::FIVE {
+    if value >= 10_000_000 {
       return (value, mv, path);
     }
 
     // 2) Otherwise (onlyThree=false, onlyFour=false)
     let mut path_buf2 = vec![];
     let (value2, mv2, path2) = self.analyze(false, false, board, role, self.depth, 0, &mut path_buf2, -MAX, MAX);
-
+    info!("AI second analyze {:?} {:?} {:?}", value2, mv2, path2);
     value = value2;
     mv = mv2;
     path = path2;
@@ -241,7 +236,7 @@ impl AIEngine {
 
     board.undo(); // Undo
 
-    if value < shape::FIVE && value_rev == shape::FIVE && path_rev.len() > path.len() {
+    if value < 10_000_000 && value_rev == 10_000_000 && path_rev.len() > path.len() {
       // Additional check:
       let mut path_buf4 = vec![];
       let (value_rev2, move_rev2, path_rev2) = self.analyze(

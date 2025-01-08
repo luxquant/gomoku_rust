@@ -153,7 +153,7 @@ impl TerminalUI {
     for i in 1..=board.size {
       execute!(stdout_, MoveTo(offset_x, offset_y + (i as u16) - 1), Print("║")).ok();
       for j in 1..=board.size {
-        let stone = board.board[i][j]; // 1=O, -1=X, 0=empty
+        let stone = board.board[j][i]; // 1=O, -1=X, 0=empty
                                        // Determine if coloring is needed
         let sx = offset_x + ((j - 1) as u16) * cell_width + 1;
         let sy = offset_y + ((i - 1) as u16);

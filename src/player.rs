@@ -5,7 +5,7 @@ pub enum PlayerType {
 }
 
 // Role of the stone
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Role {
   Black, // Role for black stones, represented by -1
   White, // Role for white stones, represented by +1

@@ -2,6 +2,7 @@ use crate::ai::AIEngine;
 use crate::board::Board;
 use crate::player::{Player, PlayerType, Role};
 use crate::terminal_ui::{GameAction, TerminalUI};
+use log::{info, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameMode {
@@ -108,10 +109,11 @@ impl Game {
         PlayerType::AI => {
           if self.mode == GameMode::HumanvHuman {
             // protection against mismatch
-            println!("Error: mode HumanvHuman, but playerType=AI?");
+            warn!("Error: mode HumanvHuman, but playerType=AI?");
             break;
           }
           // make AI move
+          info!("AI is making a move");
           self.turn(player.player_type);
         }
         PlayerType::Human => {
@@ -168,8 +170,9 @@ impl Game {
 
             // Place stone (Enter / Space)
             GameAction::PlaceStone => {
-              if self.board.board[self.cursor_y + 1][self.cursor_x + 1] == 0 {
+              if self.board.board[self.cursor_x + 1][self.cursor_y + 1] == 0 {
                 // Check if the cell is free
+                info!("Human is placing a stone");
                 self.turn(player.player_type);
               }
             }
@@ -212,7 +215,7 @@ impl Game {
   }
 
   fn human_turn(&mut self) {
-    self.board.put(self.cursor_y, self.cursor_x, self.current_role);
+    self.board.put(self.cursor_x, self.cursor_y, self.current_role);
   }
 
   fn ai_turn(&mut self) {
@@ -223,8 +226,9 @@ impl Game {
     };
     let msg = format!("AI ({:?}) chose move with score={}", self.current_role, value);
     self.ui.show_message(&msg);
-    if let Some((r, c)) = move_xy {
-      self.board.put(r, c, self.current_role);
+    info!("AI moved to {:?}", move_xy);
+    if let Some((x, y)) = move_xy {
+      self.board.put(x, y, self.current_role);
     } else {
       self.ui.show_message("AI chose no move");
     }

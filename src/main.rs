@@ -4,7 +4,6 @@ mod cache;
 mod cli;
 mod game;
 mod player;
-mod shapes;
 mod terminal_ui;
 mod zobrist_cache;
 
@@ -12,10 +11,23 @@ use crate::cli::{CliArgs, GameModeArg};
 use crate::game::{Game, GameMode};
 use crate::player::{Player, PlayerType, Role};
 use clap::Parser;
+use log::info;
+use simplelog::*;
+use std::fs::File;
 
 fn main() {
+  // Initialize the logger to write to a file
+  CombinedLogger::init(vec![WriteLogger::new(
+    LevelFilter::Info,
+    Config::default(),
+    File::create("log.txt").unwrap(),
+  )])
+  .unwrap();
+
   // 1) Parse command line arguments
   let args = CliArgs::parse();
+
+  info!("Starting game with args: {:?}", args);
 
   // 2) Convert args.mode to our enum GameMode
   let mode = match args.mode {
@@ -34,14 +46,15 @@ fn main() {
       depth: 0,
     },
     GameMode::AIvHuman => Player {
-      player_type: PlayerType::AI,
-      role: Role::Black,
-      depth: 4, // depth, for example
+      player_type: PlayerType::Human,
+      role: Role::White,
+      depth: 0,
     },
+
     GameMode::AIvAI => Player {
       player_type: PlayerType::AI,
       role: Role::Black,
-      depth: 4,
+      depth: 2,
     },
   };
 
@@ -52,14 +65,14 @@ fn main() {
       depth: 0,
     },
     GameMode::AIvHuman => Player {
-      player_type: PlayerType::Human,
-      role: Role::White,
-      depth: 0,
+      player_type: PlayerType::AI,
+      role: Role::Black,
+      depth: 2, // depth, for example
     },
     GameMode::AIvAI => Player {
       player_type: PlayerType::AI,
       role: Role::White,
-      depth: 4,
+      depth: 2,
     },
   };
 
