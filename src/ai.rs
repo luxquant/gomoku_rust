@@ -4,6 +4,7 @@ use crate::player::Role;
 use log::{debug, info};
 
 pub const MAX: i32 = 100_000_000;
+pub const HIGH_VALUE: i32 = 20_000_000;
 
 /// Structure to account for cache statistics
 #[derive(Debug, Default)]
@@ -58,15 +59,10 @@ impl AIEngine {
     beta: i32,
   ) -> (i32, Option<(usize, usize)>, Vec<(usize, usize)>) {
     self.cache_hits.search += 1;
-    info!(
-      "AI analyze {:?} {:?} {:?} depth={:?} сdepth={:?} {:?}",
-      only_three, only_four, role, depth, cdepth, path
-    );
 
     // 1) Base exit conditions
     if cdepth >= depth || board.is_game_over() {
       let score = board.evaluate(role);
-      info!("Base exit: depth={}, score={}", cdepth, score);
       return (score, None, path.clone());
     }
 
@@ -75,7 +71,7 @@ impl AIEngine {
     if let Some(prev) = self.cache.get(&hash_val) {
       if prev.role == role {
         let depth_left = depth - cdepth;
-        if (prev.value.abs() >= 10_000_000 || prev.depth >= depth_left)
+        if (prev.value.abs() >= HIGH_VALUE || prev.depth >= depth_left)
           && prev.only_three == only_three
           && prev.only_four == only_four
         {
@@ -85,7 +81,6 @@ impl AIEngine {
             p.extend_from_slice(&prev.path);
             p
           };
-          debug!("Cache hit: depth={}, value={}", prev.depth, prev.value);
           return (prev.value, prev.move_xy, new_path);
         }
       }
@@ -99,10 +94,8 @@ impl AIEngine {
 
     // 4) Generate "valuable" moves
     let points = board.get_valuable_moves(role, cdepth, only_three || cdepth > self.only_three_threshold, only_four);
-    info!("AI points {:?}", points);
     if points.is_empty() {
       let score = board.evaluate(role);
-      debug!("No valuable moves: score={}", score);
       return (score, None, path.clone());
     }
 
@@ -135,11 +128,9 @@ impl AIEngine {
         // Return to own role
         eval_score = -eval_score;
 
-        info!("AI eval_score {:?} {:?} {:?}", eval_score, d, depth);
-
         // 8) Compare with maximum
-        if eval_score >= 10_000_000 || d == depth {
-          if eval_score > value || (eval_score <= -10_000_000 && value <= -10_000_000 && eval_path.len() as i32 > best_depth) {
+        if eval_score >= HIGH_VALUE || d == depth {
+          if eval_score > value || (eval_score <= -HIGH_VALUE && value <= -HIGH_VALUE && eval_path.len() as i32 > best_depth) {
             value = eval_score;
             best_path = eval_path.clone();
             best_depth = best_path.len() as i32;
@@ -149,7 +140,7 @@ impl AIEngine {
 
         // 9) Alpha-beta
         alpha = alpha.max(value);
-        if alpha >= 10_000_000 {
+        if alpha >= HIGH_VALUE {
           break 'depthLoop;
         }
         if alpha >= beta {
@@ -185,8 +176,6 @@ impl AIEngine {
       );
       self.cache_hits.total += 1;
     }
-
-    info!("Analyze result: best_move={:?}, depth={}, value={}", best_move, cdepth, value);
     (value, best_move, best_path)
   }
 
@@ -197,22 +186,23 @@ impl AIEngine {
     //    similar to "let [value, move, path] = this.analyze(true, false, ...)"
     let mut path_buf = vec![];
     let (mut value, mut mv, mut path) = self.analyze(true, false, board, role, vct_depth, 0, &mut path_buf, -MAX, MAX);
-    info!("AI first analyze {:?} {:?} {:?}", value, mv, path);
     // If the score >= SCORES.FIVE => direct return
-    if value >= 10_000_000 {
+    if value >= HIGH_VALUE {
+      info!("AI 1 analyze {:?} {:?} {:?}", value, mv, path);
       return (value, mv, path);
     }
 
     // 2) Otherwise (onlyThree=false, onlyFour=false)
     let mut path_buf2 = vec![];
     let (value2, mv2, path2) = self.analyze(false, false, board, role, self.depth, 0, &mut path_buf2, -MAX, MAX);
-    info!("AI second analyze {:?} {:?} {:?}", value2, mv2, path2);
+    info!("AI 2 analyze {:?} {:?} {:?}", value2, mv2, path2);
     value = value2;
     mv = mv2;
     path = path2;
 
     if mv.is_none() {
-      return (value, None, path);
+      info!("AI 3 analyze return {:?} {:?} {:?}", value, mv, path);
+      return (value, mv, path);
     }
 
     // 3) Make a move on the board to check further
@@ -236,7 +226,7 @@ impl AIEngine {
 
     board.undo(); // Undo
 
-    if value < 10_000_000 && value_rev == 10_000_000 && path_rev.len() > path.len() {
+    if value < HIGH_VALUE && value_rev == HIGH_VALUE && path_rev.len() > path.len() {
       // Additional check:
       let mut path_buf4 = vec![];
       let (value_rev2, move_rev2, path_rev2) = self.analyze(
@@ -252,11 +242,11 @@ impl AIEngine {
       );
 
       if path_rev.len() <= path_rev2.len() {
-        // Return move_rev
+        info!("AI 4 analyze return {:?} {:?} {:?}", value, move_rev, path_rev);
         return (value, move_rev, path_rev);
       }
     }
-
+    info!("AI 5 analyze return {:?} {:?} {:?}", value, mv, path);
     (value, mv, path)
   }
 }

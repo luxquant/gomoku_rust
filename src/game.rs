@@ -69,24 +69,25 @@ impl Game {
     let mut game_is_over = false;
 
     loop {
-      // 1) Update the drawing (center the board and draw)
-      self.ui.draw_board(
-        &self.board,
-        self.cursor_x,
-        self.cursor_y,
-        self.last_stone_x,
-        self.last_stone_y,
-      );
-
-      // 2) Depending on the mode and the current player, make a move
+      // Determine the current player based on the current role
       let player = if self.current_role == self.player1.role {
         &self.player1
       } else {
         &self.player2
       };
 
+      // Update the drawing (center the board and draw)
+      self.ui.draw_board(
+        &self.board,
+        self.cursor_x,
+        self.cursor_y,
+        self.last_stone_x,
+        self.last_stone_y,
+        player.player_type,
+      );
+
       if paused || game_is_over {
-        // If paused, wait for input
+        // If paused or game is over, wait for input
         let action = self.ui.read_input();
         if game_is_over {
           break;
@@ -146,22 +147,25 @@ impl Game {
               continue;
             }
 
-            // Move cursor
+            // Move cursor left
             GameAction::MoveLeft => {
               if self.cursor_x > 0 {
                 self.cursor_x -= 1;
               }
             }
+            // Move cursor right
             GameAction::MoveRight => {
               if self.cursor_x + 1 < self.board.size {
                 self.cursor_x += 1;
               }
             }
+            // Move cursor up
             GameAction::MoveUp => {
               if self.cursor_y > 0 {
                 self.cursor_y -= 1;
               }
             }
+            // Move cursor down
             GameAction::MoveDown => {
               if self.cursor_y + 1 < self.board.size {
                 self.cursor_y += 1;
@@ -185,12 +189,18 @@ impl Game {
         }
       } // end match
 
-      // После совершения хода — проверяем окончание игры
+      // After making a move, check if the game is over
       if self.board.is_game_over() {
         let w = self.board.get_winner();
         self.print_winner(w);
         game_is_over = true;
       }
+    }
+    // If the game is over, print the winner and set the game_is_over flag to true
+    if self.board.is_game_over() {
+      let winner = self.board.get_winner();
+      self.print_winner(winner);
+      game_is_over = true;
     }
 
     // At the end — restore the terminal to normal state
@@ -203,19 +213,15 @@ impl Game {
       PlayerType::Human => self.human_turn(),
     }
 
-    self.last_stone_x = Some(self.cursor_x);
-    self.last_stone_y = Some(self.cursor_y);
-
-    // Переход хода
+    // Switch turn
     self.current_role = self.current_role.opponent();
     self.round += 1;
-
-    // Сохраняем сообщение во временную переменную
-    // self.ui.show_message(&format!("Round: {}", self.round));
   }
 
   fn human_turn(&mut self) {
     self.board.put(self.cursor_x, self.cursor_y, self.current_role);
+    self.last_stone_x = Some(self.cursor_x);
+    self.last_stone_y = Some(self.cursor_y);
   }
 
   fn ai_turn(&mut self) {
@@ -229,6 +235,8 @@ impl Game {
     info!("AI moved to {:?}", move_xy);
     if let Some((x, y)) = move_xy {
       self.board.put(x, y, self.current_role);
+      self.last_stone_x = Some(x);
+      self.last_stone_y = Some(y);
     } else {
       self.ui.show_message("AI chose no move");
     }

@@ -6,7 +6,7 @@ use crossterm::{
   terminal::{disable_raw_mode, enable_raw_mode, size, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
-use crate::board::Board;
+use crate::{board::Board, player::PlayerType};
 use std::io::{stdout, Result as IoResult}; // Note, we take Result as IoResult
 
 // Definition of the GameAction enum for various actions in the game
@@ -123,11 +123,12 @@ impl TerminalUI {
     cursor_y: usize,
     last_stone_x: Option<usize>,
     last_stone_y: Option<usize>,
+    current_player_type: PlayerType,
   ) {
     let (cols, rows) = size().unwrap_or((80, 24));
 
     let bsize = board.size as u16;
-    let cell_width: u16 = 3; // Увеличиваем ширину ячейки для добавления пробела
+    let cell_width: u16 = 3; // Increase cell width to add a space
     let used_width = bsize * cell_width - 1;
     let used_height = bsize;
 
@@ -166,7 +167,7 @@ impl TerminalUI {
         };
 
         // Check if the cursor is here
-        let is_cursor = (j - 1 == cursor_x) && (i - 1 == cursor_y);
+        let is_cursor = current_player_type == PlayerType::Human && (j - 1 == cursor_x) && (i - 1 == cursor_y);
 
         // We will print either 'X', 'O', or '.'.
         // But if the cursor is on an occupied cell, we need to "highlight" the figure.
@@ -217,7 +218,7 @@ impl TerminalUI {
           // Without color
           execute!(stdout_, MoveTo(sx, sy), Print(symbol)).ok();
         }
-        // Добавляем пробел между ячейками
+        // Add a space between cells
         execute!(stdout_, Print(" ")).ok();
       }
       execute!(stdout_, Print("║")).ok();

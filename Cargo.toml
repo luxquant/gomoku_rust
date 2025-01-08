@@ -1,14 +1,21 @@
 [package]
 name = "gomoku_rust"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
 rand = "0.8.5"
 crossterm = "0.28.1"
 clap = { version = "4.5.23", features = ["derive"] } 
-rayon = "1.10.0"
 
 log = "0.4"
 env_logger = "0.11.6"
 simplelog = "0.12.2"
+
+[profile.release]
+codegen-units = 1
+incremental = false
+lto = "fat"
+opt-level = 3
+panic = "abort"
+strip = true

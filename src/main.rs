@@ -50,11 +50,10 @@ fn main() {
       role: Role::White,
       depth: 0,
     },
-
     GameMode::AIvAI => Player {
       player_type: PlayerType::AI,
       role: Role::Black,
-      depth: 2,
+      depth: args.depth,
     },
   };
 
@@ -67,12 +66,12 @@ fn main() {
     GameMode::AIvHuman => Player {
       player_type: PlayerType::AI,
       role: Role::Black,
-      depth: 2, // depth, for example
+      depth: args.depth,
     },
     GameMode::AIvAI => Player {
       player_type: PlayerType::AI,
       role: Role::White,
-      depth: 2,
+      depth: args.depth,
     },
   };
 

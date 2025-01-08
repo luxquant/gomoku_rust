@@ -22,4 +22,8 @@ pub struct CliArgs {
   /// Field size
   #[arg(long, default_value_t = 15)]
   pub size: usize,
+
+  /// AI depth
+  #[arg(long, default_value_t = 3)]
+  pub depth: i32,
 }
