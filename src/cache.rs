@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::usize;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Cache<K, V> {
   capacity: usize,
   /// Store keys in a FIFO structure (VecDeque) to "shift" when overflowing
@@ -56,8 +56,28 @@ where
     self.map.insert(key, value);
   }
 
-  /// Check for presence in the cache (analog of `has`).
-  pub fn has(&self, key: &K) -> bool {
-    self.map.contains_key(key)
+  // /// Check for presence in the cache (analog of `has`).
+  // pub fn has(&self, key: &K) -> bool {
+  //   self.map.contains_key(key)
+  // }
+}
+#[cfg(test)]
+mod tests {
+  use super::Cache;
+
+  #[test]
+  fn test_cache_basic_put_get() {
+    let mut c = Cache::new(2);
+    c.put("key1", 10);
+    c.put("key2", 20);
+    assert_eq!(c.get(&"key1"), Some(&10));
+    assert_eq!(c.get(&"key2"), Some(&20));
+
+    // Exceeding capacity => the first inserted item should be removed
+    c.put("key3", 30);
+    // "key1" might have been evicted
+    assert_eq!(c.get(&"key1"), None);
+    assert_eq!(c.get(&"key2"), Some(&20));
+    assert_eq!(c.get(&"key3"), Some(&30));
   }
 }

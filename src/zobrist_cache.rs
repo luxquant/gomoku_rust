@@ -1,7 +1,7 @@
 use rand::Rng;
 
 /// Structure for storing the Zobrist table and the current hash.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ZobristCache {
   /// Two-dimensional table: zobrist_table[x][y] = [u64; 2],
   /// where index 0 corresponds to role=1 (black),
@@ -9,8 +9,8 @@ pub struct ZobristCache {
   zobrist_table: Vec<Vec<[u64; 2]>>,
   /// Current sum (XOR) of Zobrist keys.
   hash: u64,
-  /// Size of the game board (gomoku is usually 15, but can be any size).
-  pub size: usize,
+  // /// Size of the game board (gomoku is usually 15, but can be any size).
+  // pub size: usize,
 }
 
 impl ZobristCache {
@@ -20,7 +20,7 @@ impl ZobristCache {
     ZobristCache {
       zobrist_table,
       hash: 0,
-      size,
+      // size,
     }
   }
 
@@ -51,5 +51,51 @@ impl ZobristCache {
   /// Returns the current Zobrist hash value.
   pub fn get_hash(&self) -> u64 {
     self.hash
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::ZobristCache;
+
+  #[test]
+  fn test_zobrist_toggle() {
+    let size = 5;
+    let mut z = ZobristCache::new(size);
+    let h0 = z.get_hash();
+
+    // Пусть role_val = +1 (White)
+    z.toggle_piece(2, 2, 1);
+    let h1 = z.get_hash();
+    assert_ne!(h0, h1, "Hash must change after toggling a piece");
+
+    // Ещё раз такой же toggling => хеш вернётся обратно
+    z.toggle_piece(2, 2, 1);
+    let h2 = z.get_hash();
+    assert_eq!(h0, h2, "Hash must revert after toggling same piece again");
+
+    // Проверка на другую клетку/роль
+    z.toggle_piece(1, 3, -1);
+    let h3 = z.get_hash();
+    assert_ne!(h0, h3);
+    assert_ne!(h1, h3);
+  }
+
+  #[test]
+  fn test_zobrist_collisions() {
+    // Просто мини-проверка, что при разных позициях
+    // хеши с очень малой вероятностью совпадут
+    let size = 3;
+    let mut z = ZobristCache::new(size);
+    let h0 = z.get_hash();
+    z.toggle_piece(0, 0, 1);
+    let h1 = z.get_hash();
+    z.toggle_piece(2, 2, -1);
+    let h2 = z.get_hash();
+
+    // Не гарантируем, но ожидаем практически всегда h0 != h1 != h2
+    assert_ne!(h0, h1);
+    assert_ne!(h0, h2);
+    assert_ne!(h1, h2);
   }
 }

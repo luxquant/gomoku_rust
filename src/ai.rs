@@ -1,10 +1,11 @@
 use crate::board::Board;
 use crate::cache::Cache;
 use crate::player::Role;
-use log::{debug, info};
+use log::info;
+use tracing::instrument;
 
 pub const MAX: i32 = 100_000_000;
-pub const HIGH_VALUE: i32 = 20_000_000;
+pub const HIGH_VALUE: i32 = 4_000_000;
 
 /// Structure to account for cache statistics
 #[derive(Debug, Default)]
@@ -14,7 +15,7 @@ pub struct CacheHits {
   pub hit: i32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CacheEntry {
   pub depth: i32,
   pub value: i32,
@@ -24,7 +25,7 @@ pub struct CacheEntry {
   pub only_three: bool,
   pub only_four: bool,
 }
-
+#[derive(Debug)]
 pub struct AIEngine {
   pub depth: i32,
   pub cache_hits: CacheHits,
@@ -45,6 +46,7 @@ impl AIEngine {
     }
   }
 
+  #[instrument]
   #[allow(clippy::too_many_arguments)]
   fn analyze(
     &mut self,
@@ -182,6 +184,13 @@ impl AIEngine {
   pub fn make_move(&mut self, board: &mut Board, role: Role) -> (i32, Option<(usize, usize)>, Vec<(usize, usize)>) {
     let vct_depth = self.depth + self.depth * 2;
 
+    // Если на доске совсем нет ходов, значит это первый ход в партии
+    if board.history.is_empty() {
+      let center = board.size / 2;
+      board.put(center, center, role);
+      return (0, Some((center, center)), vec![]);
+    }
+
     // 1) First try to analyze with (onlyThree=true, onlyFour=false)
     //    similar to "let [value, move, path] = this.analyze(true, false, ...)"
     let mut path_buf = vec![];
@@ -229,7 +238,7 @@ impl AIEngine {
     if value < HIGH_VALUE && value_rev == HIGH_VALUE && path_rev.len() > path.len() {
       // Additional check:
       let mut path_buf4 = vec![];
-      let (value_rev2, move_rev2, path_rev2) = self.analyze(
+      let (_, _, path_rev2) = self.analyze(
         true,
         false,
         &mut rev_board.clone(),

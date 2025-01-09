@@ -7,7 +7,7 @@ mod player;
 mod terminal_ui;
 mod zobrist_cache;
 
-use crate::cli::{CliArgs, GameModeArg};
+use crate::cli::{CliArgs, FirstPlayerArg, GameModeArg};
 use crate::game::{Game, GameMode};
 use crate::player::{Player, PlayerType, Role};
 use clap::Parser;
@@ -16,6 +16,14 @@ use simplelog::*;
 use std::fs::File;
 
 fn main() {
+  // Configure tracing to write to a file
+  // let subscriber = FmtSubscriber::builder()
+  // .with_max_level(tracing::Level::INFO)
+  // .with_writer(std::fs::File::create("profiling.log").unwrap()) // Specify the output file
+  // .finish();
+
+  // tracing::subscriber::set_global_default(subscriber).expect("Setting default subscriber failed");
+
   // Initialize the logger to write to a file
   CombinedLogger::init(vec![WriteLogger::new(
     LevelFilter::Info,
@@ -36,48 +44,63 @@ fn main() {
     GameModeArg::AiAi => GameMode::AIvAI,
   };
 
-  // 3) Define players
-  //    For simplicity: player1 is Black, player2 is White.
-  //    In real code, you might ask the user who is black and who is white.
-  let player1 = match mode {
-    GameMode::HumanvHuman => Player {
-      player_type: PlayerType::Human,
-      role: Role::Black,
-      depth: 0,
+  // 3) Define players based on the game mode
+  let (player1, player2) = match mode {
+    GameMode::HumanvHuman => (
+      Player {
+        player_type: PlayerType::Human,
+        role: Role::Black,
+        depth: 0,
+      },
+      Player {
+        player_type: PlayerType::Human,
+        role: Role::White,
+        depth: 0,
+      },
+    ),
+    GameMode::AIvHuman => match args.first_player {
+      FirstPlayerArg::Human => (
+        Player {
+          player_type: PlayerType::Human,
+          role: Role::Black,
+          depth: 0,
+        },
+        Player {
+          player_type: PlayerType::AI,
+          role: Role::White,
+          depth: args.depth,
+        },
+      ),
+      FirstPlayerArg::AI => (
+        Player {
+          player_type: PlayerType::AI,
+          role: Role::Black,
+          depth: args.depth,
+        },
+        Player {
+          player_type: PlayerType::Human,
+          role: Role::White,
+          depth: 0,
+        },
+      ),
     },
-    GameMode::AIvHuman => Player {
-      player_type: PlayerType::Human,
-      role: Role::White,
-      depth: 0,
-    },
-    GameMode::AIvAI => Player {
-      player_type: PlayerType::AI,
-      role: Role::Black,
-      depth: args.depth,
-    },
+    GameMode::AIvAI => (
+      Player {
+        player_type: PlayerType::AI,
+        role: Role::Black,
+        depth: args.depth,
+      },
+      Player {
+        player_type: PlayerType::AI,
+        role: Role::White,
+        depth: args.depth,
+      },
+    ),
   };
 
-  let player2 = match mode {
-    GameMode::HumanvHuman => Player {
-      player_type: PlayerType::Human,
-      role: Role::White,
-      depth: 0,
-    },
-    GameMode::AIvHuman => Player {
-      player_type: PlayerType::AI,
-      role: Role::Black,
-      depth: args.depth,
-    },
-    GameMode::AIvAI => Player {
-      player_type: PlayerType::AI,
-      role: Role::White,
-      depth: args.depth,
-    },
-  };
-
-  // 4) Create the game
+  // 4) Create the game instance
   let mut game = Game::new(args.size, mode, player1, player2);
 
-  // 5) Run the game
+  // 5) Run the game loop
   game.run();
 }

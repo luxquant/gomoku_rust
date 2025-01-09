@@ -11,6 +11,13 @@ pub enum GameModeArg {
   AiAi,
 }
 
+/// First player
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FirstPlayerArg {
+  Human,
+  AI,
+}
+
 /// Gomoku
 #[derive(Parser, Debug)]
 #[command(name = "gomoku_rust", version = "0.1.0")]
@@ -26,4 +33,8 @@ pub struct CliArgs {
   /// AI depth
   #[arg(long, default_value_t = 3)]
   pub depth: i32,
+
+  /// First player in Human vs AI mode
+  #[arg(long, value_enum, default_value_t=FirstPlayerArg::Human)]
+  pub first_player: FirstPlayerArg,
 }

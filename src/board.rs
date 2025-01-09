@@ -1,3 +1,6 @@
+use log::info;
+use tracing::instrument;
+
 use crate::cache::Cache;
 use crate::player::Role;
 use crate::zobrist_cache::ZobristCache;
@@ -6,10 +9,10 @@ use std::collections::HashMap;
 const DIRECTIONS: usize = 4;
 
 const ALL_DIRECTIONS: [[i32; 2]; 4] = [
-  [0, 1],  // Horizontal
-  [1, 0],  // Vertical
+  [1, 0],  // Horizontal
+  [0, 1],  // Vertical
   [1, 1],  // Diagonal "\"
-  [1, -1], // Diagonal "/"
+  [-1, 1], // Diagonal "/"
 ];
 
 /// For convenience, we will make enum templates or IDs (we could store the cost directly).
@@ -27,7 +30,7 @@ pub enum ShapeId {
 /// for each of the 4 directions:
 ///   - shape_id (index of the pattern that "matched" exactly when activating (x,y))
 ///   - dirty: bool (whether it needs to be recalculated)
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ShapeCache {
   /// shape_cache[role][dir][x][y] = (shape_id, cost)
   /// role can be mapped to 0..1 (0=Black, 1=White)
@@ -83,7 +86,7 @@ fn role_index(r: Role) -> usize {
   }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct ValuableMovesCacheEntry {
   role: Role,
   moves: Vec<(usize, usize)>,
@@ -92,7 +95,7 @@ struct ValuableMovesCacheEntry {
   only_four: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Board {
   pub size: usize,
   pub board: Vec<Vec<i32>>,               // 0=empty, +1=white, -1=black
@@ -153,42 +156,41 @@ impl Board {
       valuable_moves_cache: Cache::new(0),    // Initialize valuable moves cache
       role_scores,
       patterns: vec![
-        (0, vec![0, 1, 1, 1, 1], 10_000_000),      // FIVE
-        (1, vec![1, 0, 1, 1, 1], 10_000_000),      // FIVE
-        (2, vec![1, 1, 0, 1, 1], 10_000_000),      // FIVE
-        (3, vec![1, 1, 1, 0, 1], 10_000_000),      // FIVE
-        (4, vec![1, 1, 1, 1, 0], 10_000_000),      // FIVE
-        (1, vec![0, 0, 1, 1, 1, 0], 5_000_000),    // OPEN_FOUR
-        (4, vec![0, 1, 1, 1, 0, 0], 5_000_000),    // OPEN_FOUR
-        (2, vec![0, 1, 0, 1, 1, 0], 5_000_000),    // OPEN_FOUR
-        (3, vec![0, 1, 1, 0, 1, 0], 5_000_000),    // OPEN_FOUR
-        (5, vec![2, 0, 1, 1, 1, 0, 0], 5_000_000), // SEMIOPEN_FOUR
-        (1, vec![0, 0, 1, 1, 1, 0, 2], 5_000_000), // SEMIOPEN_FOUR
-        (1, vec![0, 0, 1, 1, 1, 2], 300_000),      // SEMIOPEN_FOUR
-        (2, vec![0, 1, 0, 1, 1, 2], 300_000),      // SEMIOPEN_FOUR
-        (3, vec![0, 1, 1, 0, 1, 2], 300_000),      // SEMIOPEN_FOUR
-        (4, vec![0, 1, 1, 1, 0, 2], 300_000),      // SEMIOPEN_FOUR
-        (4, vec![2, 1, 1, 1, 0, 0], 300_000),      // SEMIOPEN_FOUR
-        (3, vec![2, 1, 1, 0, 1, 0], 300_000),      // SEMIOPEN_FOUR
-        (2, vec![2, 1, 0, 1, 1, 0], 300_000),      // SEMIOPEN_FOUR
-        (1, vec![0, 0, 1, 1, 0], 250_000),         // OPEN_THREE
-        (2, vec![0, 1, 0, 1, 0], 250_000),         // OPEN_THREE
-        (3, vec![0, 1, 1, 0, 0], 250_000),         // OPEN_THREE
-        (1, vec![0, 0, 1, 1, 2], 20_000),          // SEMIOPEN_THREE
-        (2, vec![0, 1, 0, 1, 2], 20_000),          // SEMIOPEN_THREE
-        (3, vec![0, 1, 1, 0, 2], 20_000),          // SEMIOPEN_THREE
-        (3, vec![2, 1, 1, 0, 0], 20_000),          // SEMIOPEN_THREE
-        (2, vec![2, 1, 0, 1, 0], 20_000),          // SEMIOPEN_THREE
-        (1, vec![2, 0, 1, 1, 0], 20_000),          // SEMIOPEN_THREE
-        (1, vec![0, 0, 1, 0], 3_000),              // OPEN_TWO
-        (2, vec![0, 1, 0, 0], 3_000),              // OPEN_TWO
-        (1, vec![0, 0, 1, 2], 200),                // SEMIOPEN_TWO
-        (2, vec![0, 1, 0, 2], 200),                // SEMIOPEN_TWO
-        (2, vec![2, 1, 0, 0], 200),                // SEMIOPEN_TWO
-        (1, vec![2, 0, 1, 0], 200),                // SEMIOPEN_TWO
-        (1, vec![0, 0, 0], 30),                    // OPEN_ONE
-        (1, vec![0, 0, 2], 1),                     // SEMIOPEN_ONE
-        (1, vec![2, 0, 0], 1),                     // SEMIOPEN_ONE
+        (0, vec![0, 1, 1, 1, 1], 4_000_000),    // FIVE
+        (1, vec![1, 0, 1, 1, 1], 4_000_000),    // FIVE
+        (2, vec![1, 1, 0, 1, 1], 4_000_000),    // FIVE
+        (3, vec![1, 1, 1, 0, 1], 4_000_000),    // FIVE
+        (4, vec![1, 1, 1, 1, 0], 4_000_000),    // FIVE
+        (1, vec![0, 0, 1, 1, 1, 0], 2_000_000), // OPEN_FOUR
+        (4, vec![0, 1, 1, 1, 0, 0], 2_000_000), // OPEN_FOUR
+        (2, vec![0, 1, 0, 1, 1, 0], 2_000_000), // OPEN_FOUR
+        (3, vec![0, 1, 1, 0, 1, 0], 2_000_000), // OPEN_FOUR
+        (1, vec![0, 0, 1, 1, 1, 2], 600_000),   // SEMIOPEN_FOUR
+        (2, vec![0, 1, 0, 1, 1, 2], 600_000),   // SEMIOPEN_FOUR
+        (3, vec![0, 1, 1, 0, 1, 2], 600_000),   // SEMIOPEN_FOUR
+        (4, vec![0, 1, 1, 1, 0, 2], 600_000),   // SEMIOPEN_FOUR
+        (4, vec![2, 1, 1, 1, 0, 0], 600_000),   // SEMIOPEN_FOUR
+        (3, vec![2, 1, 1, 0, 1, 0], 600_000),   // SEMIOPEN_FOUR
+        (2, vec![2, 1, 0, 1, 1, 0], 600_000),   // SEMIOPEN_FOUR
+        (1, vec![0, 0, 1, 1, 0], 200_000),      // OPEN_THREE
+        (2, vec![0, 1, 0, 1, 0], 200_000),      // OPEN_THREE
+        (3, vec![0, 1, 1, 0, 0], 200_000),      // OPEN_THREE
+        (2, vec![0, 1, 0, 0, 1, 0], 100_000),   // OPEN_THREE
+        (3, vec![0, 1, 0, 0, 1, 0], 100_000),   // OPEN_THREE
+        (1, vec![0, 0, 1, 1, 2], 30_000),       // SEMIOPEN_THREE
+        (2, vec![0, 1, 0, 1, 2], 30_000),       // SEMIOPEN_THREE
+        (3, vec![0, 1, 1, 0, 2], 30_000),       // SEMIOPEN_THREE
+        (3, vec![2, 1, 1, 0, 0], 30_000),       // SEMIOPEN_THREE
+        (2, vec![2, 1, 0, 1, 0], 30_000),       // SEMIOPEN_THREE
+        (1, vec![2, 0, 1, 1, 0], 30_000),       // SEMIOPEN_THREE
+        (1, vec![0, 0, 1, 0], 2_000),           // OPEN_TWO
+        (2, vec![0, 1, 0, 0], 2_000),           // OPEN_TWO
+        (1, vec![0, 0, 1, 2], 200),             // SEMIOPEN_TWO
+        (2, vec![0, 1, 0, 2], 200),             // SEMIOPEN_TWO
+        (2, vec![2, 1, 0, 0], 200),             // SEMIOPEN_TWO
+        (1, vec![2, 0, 1, 0], 200),             // SEMIOPEN_TWO
+        (1, vec![0, 0, 2], 2),                  // SEMIOPEN_ONE
+        (1, vec![2, 0, 0], 2),                  // SEMIOPEN_ONE
       ],
       evaluate_cache: Cache::new(0),
       shape_cache: ShapeCache::new(size),
@@ -224,6 +226,7 @@ impl Board {
     true
   }
 
+  #[instrument]
   fn recalc_scores(&mut self, x: usize, y: usize) {
     if self.board[x + 1][y + 1] == 0 {
       self.cacl_score_for_point(x, y);
@@ -231,7 +234,7 @@ impl Board {
 
     for &[dx, dy] in &ALL_DIRECTIONS {
       for &sign in &[1, -1] {
-        for step in 1..=5 {
+        for step in 1..=4 {
           let nx = (x as i32 + sign * step * dx) as i32;
           let ny = (y as i32 + sign * step * dy) as i32;
           if nx < 0 || nx >= self.size as i32 || ny < 0 || ny >= self.size as i32 {
@@ -269,6 +272,29 @@ impl Board {
         total_score += cost;
       }
 
+      // ====== ДОБАВЛЯЕМ ОБОРОНИТЕЛЬНУЮ ЛОГИКУ ======
+      // Check how dangerous the opponent's patterns are at this cell (x,y).
+      // If the opponent can get a big combination here (say, >= 1_000_000),
+      // it is important to "block" (from the perspective of the current role).
+      let opp = role.opponent();
+      self.update_cache_if_needed(opp, x, y); // recalculate if dirty
+      let opp_idx = role_index(opp);
+      let mut opp_threat_score = 0;
+      for dir in 0..DIRECTIONS {
+        let (_, cost) = self.shape_cache.data[opp_idx][dir][x][y];
+        opp_threat_score += cost;
+      }
+
+      // If the opponent at this cell potentially makes an OPEN_FOUR (~5_000_000) or higher —
+      // this is a very dangerous point, we need to defend.
+      if opp_threat_score >= 2_000_000 {
+        total_score += 1_500_000; // very dangerous opponent move
+      } else if opp_threat_score >= 1_000_000 {
+        total_score += 1_000_000; // just dangerous
+      } else if opp_threat_score >= 300_000 {
+        total_score += 600_000; // semi-open 4
+      }
+
       // Write total_score
       *self.value_mut(role, x, y) = total_score;
     }
@@ -295,14 +321,15 @@ impl Board {
   /// Here we do roughly the same logic as in the old cacl_score_for_point,
   /// but only for one direction (dir).
   /// Return (ShapeId, cost) that was found "best".
+  #[instrument]
   fn find_best_pattern_in_dir(&self, role: Role, x: usize, y: usize, dir: usize) -> (ShapeId, i32) {
     let role_val = role.to_int();
     let (dx, dy) = match dir {
-      0 => (0, 1),  // horizontal
-      1 => (1, 0),  // vertical
+      0 => (1, 0),  // horizontal
+      1 => (0, 1),  // vertical
       2 => (1, 1),  // diagonal "\"
-      3 => (1, -1), // diagonal "/"
-      _ => (0, 1),  // fallback
+      3 => (-1, 1), // diagonal "/"
+      _ => (1, 0),  // fallback
     };
 
     let mut best_cost = 0;
@@ -310,10 +337,16 @@ impl Board {
 
     // self.patterns: [(act_idx, pattern_vec, cost), ...]
     for (i_pattern, &(act_idx, ref pattern_vec, cost)) in self.patterns.iter().enumerate() {
-      let pat_len = pattern_vec.len() as i32;
+      // let pat_len = pattern_vec.len() as i32;
+
+      // Add a check: if there are more than 2 moves in history and the pattern cost is less than 2000, skip it
+      if self.history.len() > 2 && cost < 2000 {
+        continue;
+      }
 
       // Check for match
       if self.check_pattern(role_val, x, y, dx, dy, act_idx, pattern_vec) {
+        // info!("pattern_vec: act_idx {:?}, pattern: {:?}, cost: {}", act_idx, pattern_vec, cost);
         // if it matches — compare cost with best_cost
         if cost > best_cost {
           best_cost = cost;
@@ -335,9 +368,9 @@ impl Board {
       // Check for out of bounds
       if board_x < 0 || board_x >= self.size as i32 || board_y < 0 || board_y >= self.size as i32 {
         // Compare pattern_vec[i] with 2
-        if pattern_vec[i as usize] != 2 {
-          return false;
-        }
+        // if pattern_vec[i as usize] != 2 {
+        return false;
+        // }
       } else {
         // inside the board
         let real_val = self.board[board_x as usize + 1][board_y as usize + 1];
@@ -446,6 +479,7 @@ impl Board {
     0
   }
 
+  #[instrument]
   pub fn get_valuable_moves(&mut self, role: Role, depth: i32, only_three: bool, only_four: bool) -> Vec<(usize, usize)> {
     // Get the board hash
     let hash = self.hash();
@@ -457,32 +491,7 @@ impl Board {
     }
 
     // Get possible moves
-    let mut moves = self.get_moves(role, depth, only_three, only_four);
-
-    // Add a random choice among free cells in the center
-    if !only_three && !only_four {
-      let center = (self.size / 2) as isize;
-      let center_cells = vec![
-        (center - 1, center - 1),
-        (center - 1, center),
-        (center - 1, center + 1),
-        (center, center - 1),
-        (center, center),
-        (center, center + 1),
-        (center + 1, center - 1),
-        (center + 1, center),
-        (center + 1, center + 1),
-      ];
-      let free_center_cells: Vec<(usize, usize)> = center_cells
-        .into_iter()
-        .filter(|&(x, y)| self.board[(x + 1) as usize][(y + 1) as usize] == 0)
-        .map(|(x, y)| (x as usize, y as usize))
-        .collect();
-      if !free_center_cells.is_empty() {
-        let random_index = rand::random::<usize>() % free_center_cells.len();
-        moves.push(free_center_cells[random_index]);
-      }
-    }
+    let moves = self.get_moves(role, depth, only_three, only_four);
 
     // Save valuable moves to cache
     self.valuable_moves_cache.put(
@@ -566,6 +575,7 @@ impl Board {
   /// Returns the board evaluation for the specified `role`.
   /// It is assumed that `self.role_scores[r][x][y]` are already up-to-date
   /// (e.g., after consecutive calls to `cacl_score_for_point(...)`).
+  #[instrument]
   pub fn evaluate(&mut self, role: Role) -> i32 {
     // Get the board hash
     let hash = self.hash();
@@ -617,5 +627,280 @@ impl Board {
       new_board.put(x, y, role.opponent());
     }
     new_board
+  }
+
+  // Реализуем метод display для отладочного вывода доски
+  pub fn display(&self) {
+    for y in 1..=self.size {
+      for x in 1..=self.size {
+        let cell = self.board[x][y];
+        let symbol = match cell {
+          1 => "W",  // White stone
+          -1 => "B", // Black stone
+          0 => ".",  // Empty cell
+          _ => " ",  // Wall or out-of-bounds (should not happen inside the board)
+        };
+        print!("{} ", symbol);
+      }
+      println!();
+    }
+  }
+}
+
+// src/board.rs
+
+#[cfg(test)]
+mod tests_board {
+  use super::*;
+  use crate::player::Role;
+
+  #[test]
+  fn test_board_put_undo() {
+    let mut board = Board::new(5);
+    assert_eq!(board.history.len(), 0);
+
+    // Try to place White at (2,2)
+    let ok = board.put(2, 2, Role::White);
+    assert!(ok);
+    assert_eq!(board.board[3][3], 1); // white=+1
+    assert_eq!(board.history.len(), 1);
+
+    // Undo
+    let undone = board.undo();
+    assert!(undone);
+    assert_eq!(board.board[3][3], 0);
+    assert_eq!(board.history.len(), 0);
+  }
+
+  #[test]
+  fn test_put_out_of_bounds() {
+    let mut board = Board::new(5);
+    // Valid indices: 0..4
+    // Place out of bounds
+    let ok1 = board.put(5, 2, Role::Black);
+    let ok2 = board.put(4, 10, Role::Black);
+    assert!(!ok1);
+    assert!(!ok2);
+    assert_eq!(board.history.len(), 0);
+  }
+
+  #[test]
+  fn test_put_on_occupied() {
+    let mut board = Board::new(5);
+    board.put(1, 1, Role::Black);
+    // Place again on the same spot
+    let ok = board.put(1, 1, Role::White);
+    assert!(!ok, "Should not allow placing on occupied cell");
+    assert_eq!(board.history.len(), 1);
+  }
+}
+
+#[cfg(test)]
+mod tests_pattern {
+  use super::*;
+  use crate::player::Role;
+
+  #[test]
+  fn test_check_pattern_simple() {
+    let mut board = Board::new(5);
+    // Suppose we have a pattern (1, [1,1,1], cost=999)
+    // => activation_index=1, pattern_vec=[1,1,1], cost=999
+    // i.e., the activation point is the middle element of the array.
+
+    // Insert this pattern into board.patterns for testing
+    // (as if it is there)
+    let p = (1, vec![1, 1, 1], 999);
+    board.patterns.push(p);
+
+    // Place white=+1 at (1,1), (1,2), (1,3)
+    board.put(1, 1, Role::White);
+    board.put(1, 2, Role::White);
+    board.put(1, 3, Role::White);
+
+    // Manually check the pattern:
+    //  dir=0 => dx=0,dy=1 (horizontal)
+    let role_val = Role::White.to_int();
+    let found = board.check_pattern(
+      role_val,
+      1,
+      2, // x=1,y=2 — activation point (middle)
+      0,
+      1,
+      1, // act_idx=1
+      &vec![1, 1, 1],
+    );
+    assert!(found, "Should detect the pattern [1,1,1] with activation in the middle");
+  }
+
+  #[test]
+  fn test_find_best_pattern_in_dir() {
+    let mut b = Board::new(10);
+    // // Define 2 patterns (cost=500, cost=1000)
+    // b.patterns.push((1, vec![1, 1, 1], 500));
+    // b.patterns.push((1, vec![1, 1, 1, 1], 1000)); // "FOUR" simplified
+
+    // Place 4 white stones horizontally (1,1),(1,2),(1,3),(1,4)
+    b.put(1, 1, Role::White);
+    b.put(1, 2, Role::White);
+    b.put(1, 3, Role::White);
+    b.put(1, 4, Role::White);
+
+    // b.display();
+
+    // Check find_best_pattern_in_dir for (1,2) with dir=0(hor)
+    let (sh_id, cost) = b.find_best_pattern_in_dir(Role::White, 1, 0, 1);
+    println!("sh_id: {:?}, cost: {:?}", sh_id, cost);
+    match sh_id {
+      ShapeId::Pattern(idx) => {
+        let pat = &b.patterns[idx];
+        assert_eq!(pat.2, 4_000_000);
+      }
+      _ => panic!("Pattern not found"),
+    }
+    assert_eq!(cost, 4_000_000);
+
+    // If at (2,2) dir=0 => no white stones => cost=0
+    let (sh2, cost2) = b.find_best_pattern_in_dir(Role::White, 2, 2, 1);
+    match sh2 {
+      ShapeId::Pattern(idx) => {
+        let pat = &b.patterns[idx];
+        assert_eq!(pat.2, 10);
+      }
+      _ => panic!("Pattern not found"),
+    }
+    assert_eq!(cost2, 10);
+  }
+}
+
+#[cfg(test)]
+mod tests_scoring {
+  use super::*;
+  use crate::player::Role;
+
+  #[test]
+  fn test_cacl_score_for_point_defensive() {
+    // Check that with dangerous patterns from the opponent,
+    // we get additional points for this point
+    let mut brd = Board::new(10);
+
+    // Suppose there are already 3 consecutive Black stones, and cost>=1_000_000 => OpenFour
+    // For simplicity, artificially change board.patterns cost.
+    // (or add)
+    // Suppose the cost of "OpenFour" = 2_000_000,
+    //    => then opp_threat_score >=2_000_000 => add +800000
+
+    // Place black= -1 at (1,1),(1,2),(1,3) => leave (1,4) free
+    brd.put(1, 1, Role::Black);
+    brd.put(1, 2, Role::Black);
+    brd.put(1, 3, Role::Black);
+
+    // Suppose now White is considering the cell (1,4)
+    // (simulate cacl_score_for_point)
+    brd.cacl_score_for_point(1, 4);
+
+    let wsc = brd.role_scores[&Role::White][1][4];
+    let bsc = brd.role_scores[&Role::Black][1][4];
+
+    println!("wsc: {:?}, bsc: {:?}", wsc, bsc);
+
+    // If (1,4) allows Black to "close" an "OpenFour" =>
+    //   opp_threat_score=2_000_000 => => +800_000
+    // Accordingly, wsc should be >= 800_000
+    // bsc can also be significant, but in this case
+    //   Black to place there? (1,4)?
+    //   However, bsc can also be large, but not less than 800k (depends on patterns).
+    assert!(wsc >= 800_000, "White sees a big threat from Black => adds defense bonus");
+    assert!(
+      bsc >= 2_000_000,
+      "Black also sees the same location as a finishing move => big score"
+    );
+  }
+}
+
+#[cfg(test)]
+mod tests_winner {
+  use super::*;
+  use crate::player::Role;
+
+  #[test]
+  fn test_no_winner_initial() {
+    let mut b = Board::new(5);
+    let w = b.get_winner();
+    assert_eq!(w, 0);
+    assert!(!b.is_game_over());
+  }
+
+  #[test]
+  fn test_winner_black_horizontal() {
+    let mut b = Board::new(5);
+    // Place 5 consecutive stones horizontally
+    // (2,2),(3,2),(4,2),(5,2),(6,2) - but the actual field size=5 => "walls"
+    // Correct, we have inside ( x+1, y+1 ),
+    // so logical coordinates 0..4
+    //  => (0,2),(1,2),(2,2),(3,2),(4,2)
+    b.put(0, 2, Role::Black);
+    b.put(1, 2, Role::Black);
+    b.put(2, 2, Role::Black);
+    b.put(3, 2, Role::Black);
+    b.put(4, 2, Role::Black);
+
+    let w = b.get_winner();
+    assert_eq!(w, -1, "Black's role_val=-1 => means black wins");
+    assert!(b.is_game_over());
+  }
+
+  #[test]
+  fn test_winner_white_diagonal() {
+    let mut b = Board::new(5);
+    // White stones diagonally (0,0),(1,1),(2,2),(3,3),(4,4)
+    for i in 0..5 {
+      b.put(i, i, Role::White);
+    }
+    let w = b.get_winner();
+    assert_eq!(w, 1, "White=+1");
+    assert!(b.is_game_over());
+  }
+}
+
+#[cfg(test)]
+mod tests_moves {
+  use super::*;
+  use crate::player::Role;
+
+  #[test]
+  fn test_get_moves_basic() {
+    let mut b = Board::new(5);
+    // Fill with 2 Black stones, 2 White stones
+    b.put(0, 0, Role::Black);
+    b.put(4, 4, Role::White);
+    b.put(1, 1, Role::White);
+    // Check that get_moves returns the remaining free cells (5*5 -3=22)
+    let moves = b.get_moves(Role::Black, 1, false, false);
+    assert_eq!(moves.len(), 22);
+  }
+
+  #[test]
+  fn test_get_moves_filter_four() {
+    let mut b = Board::new(5);
+    // Suppose some position where (2,2) gives OpenFour>=1_000_000
+    // Simplify => manually set scores:
+    b.role_scores.get_mut(&Role::Black).unwrap()[2][2] = 1_500_000;
+    // "only_four=true"
+    let moves = b.get_moves(Role::Black, 2, false, true);
+    // should contain (2,2), as score>=1_000_000 => "FOUR"
+    assert_eq!(moves.len(), 1);
+    assert_eq!(moves[0], (2, 2));
+  }
+
+  #[test]
+  fn test_get_valuable_moves_cached() {
+    let mut b = Board::new(5);
+    // First call to fill valuable_moves_cache
+    let mv1 = b.get_valuable_moves(Role::White, 2, false, false);
+    // Second call => should take from cache
+    let mv2 = b.get_valuable_moves(Role::White, 2, false, false);
+    assert_eq!(mv1, mv2);
+    // Check that something was returned
+    assert!(!mv1.is_empty());
   }
 }

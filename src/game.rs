@@ -196,12 +196,6 @@ impl Game {
         game_is_over = true;
       }
     }
-    // If the game is over, print the winner and set the game_is_over flag to true
-    if self.board.is_game_over() {
-      let winner = self.board.get_winner();
-      self.print_winner(winner);
-      game_is_over = true;
-    }
 
     // At the end — restore the terminal to normal state
     self.ui.restore_terminal().unwrap();
