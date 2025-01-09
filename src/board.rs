@@ -272,7 +272,7 @@ impl Board {
         total_score += cost;
       }
 
-      // ====== ДОБАВЛЯЕМ ОБОРОНИТЕЛЬНУЮ ЛОГИКУ ======
+      // ====== ADDING DEFENSIVE LOGIC ======
       // Check how dangerous the opponent's patterns are at this cell (x,y).
       // If the opponent can get a big combination here (say, >= 1_000_000),
       // it is important to "block" (from the perspective of the current role).
@@ -307,54 +307,58 @@ impl Board {
 
     for dir in 0..DIRECTIONS {
       if self.shape_cache.dirty[r_idx][dir][x][y] {
-        // Need to recalculate
-        let (sh_id, cost) = self.find_best_pattern_in_dir(role, x, y, dir);
+        // Нужно пересчитать
+        let (sh_id, total_cost) = self.find_best_pattern_in_dir(role, x, y, dir);
 
-        // Update in cache
-        self.shape_cache.data[r_idx][dir][x][y] = (sh_id, cost);
-        // Remove dirty flag
+        // В shape_cache.data[r_idx][dir][x][y] мы храним (ShapeId, i32).
+        // Запишем найденный shape_id + суммарный cost
+        self.shape_cache.data[r_idx][dir][x][y] = (sh_id, total_cost);
+
+        // Сбрасываем dirty
         self.shape_cache.dirty[r_idx][dir][x][y] = false;
       }
     }
   }
 
-  /// Here we do roughly the same logic as in the old cacl_score_for_point,
-  /// but only for one direction (dir).
-  /// Return (ShapeId, cost) that was found "best".
+  /// Returns `(ShapeId, total_cost)`, where `ShapeId` is the ID of the pattern with the maximum cost,
+  /// and `total_cost` is the sum of all matched patterns.
+  /// Thus, if the point (x,y) creates multiple threats, they will be summed.
   #[instrument]
   fn find_best_pattern_in_dir(&self, role: Role, x: usize, y: usize, dir: usize) -> (ShapeId, i32) {
     let role_val = role.to_int();
     let (dx, dy) = match dir {
-      0 => (1, 0),  // horizontal
-      1 => (0, 1),  // vertical
-      2 => (1, 1),  // diagonal "\"
-      3 => (-1, 1), // diagonal "/"
-      _ => (1, 0),  // fallback
+      0 => (1, 0),  // horizontal direction
+      1 => (0, 1),  // vertical direction
+      2 => (1, 1),  // diagonal direction "\"
+      3 => (-1, 1), // diagonal direction "/"
+      _ => (1, 0),  // default fallback
     };
 
-    let mut best_cost = 0;
+    let mut best_cost = 0; // cost of the most expensive pattern
     let mut best_shape = ShapeId::None;
+    let mut sum_cost = 0; // sum of costs of all matched patterns
 
-    // self.patterns: [(act_idx, pattern_vec, cost), ...]
     for (i_pattern, &(act_idx, ref pattern_vec, cost)) in self.patterns.iter().enumerate() {
-      // let pat_len = pattern_vec.len() as i32;
-
-      // Add a check: if there are more than 2 moves in history and the pattern cost is less than 2000, skip it
-      if self.history.len() > 2 && cost < 2000 {
+      // Let's apply a small heuristic to skip
+      // very cheap patterns if the game is already advanced
+      if self.history.len() > 2 && cost < 200 {
         continue;
       }
 
-      // Check for match
+      // Check for pattern match
       if self.check_pattern(role_val, x, y, dx, dy, act_idx, pattern_vec) {
-        // info!("pattern_vec: act_idx {:?}, pattern: {:?}, cost: {}", act_idx, pattern_vec, cost);
-        // if it matches — compare cost with best_cost
+        // If matched, add cost to sum_cost
+        sum_cost += cost;
+        // Compare if this is the most expensive pattern
         if cost > best_cost {
           best_cost = cost;
           best_shape = ShapeId::Pattern(i_pattern);
         }
       }
     }
-    (best_shape, best_cost)
+
+    // Return (ShapeId of the most expensive, sum)
+    (best_shape, sum_cost)
   }
 
   /// Check if pattern_vec matches when "activating" (x,y),
@@ -629,7 +633,7 @@ impl Board {
     new_board
   }
 
-  // Реализуем метод display для отладочного вывода доски
+  // Implement the display method for debugging the board
   pub fn display(&self) {
     for y in 1..=self.size {
       for x in 1..=self.size {

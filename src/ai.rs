@@ -5,7 +5,7 @@ use log::info;
 use tracing::instrument;
 
 pub const MAX: i32 = 100_000_000;
-pub const HIGH_VALUE: i32 = 4_000_000;
+pub const HIGH_VALUE: i32 = 5_500_000;
 
 /// Structure to account for cache statistics
 #[derive(Debug, Default)]
