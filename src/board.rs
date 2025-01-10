@@ -2,6 +2,7 @@ use log::info;
 use tracing::instrument;
 
 use crate::cache::Cache;
+use crate::patterns::GOMOKU_PATTERNS;
 use crate::player::Role;
 use crate::zobrist_cache::ZobristCache;
 use std::collections::HashMap;
@@ -107,7 +108,7 @@ pub struct Board {
   valuable_moves_cache: Cache<u64, ValuableMovesCacheEntry>,
 
   role_scores: HashMap<Role, Vec<Vec<i32>>>,
-  patterns: Vec<(i32, Vec<i32>, i32)>,
+  patterns: &'static [(i32, &'static [i32], i32)],
   shape_cache: ShapeCache,
 }
 
@@ -155,43 +156,7 @@ impl Board {
       gameover_cache: Cache::new(0),          // Initialize gameover cache
       valuable_moves_cache: Cache::new(0),    // Initialize valuable moves cache
       role_scores,
-      patterns: vec![
-        (0, vec![0, 1, 1, 1, 1], 4_000_000),    // FIVE
-        (1, vec![1, 0, 1, 1, 1], 4_000_000),    // FIVE
-        (2, vec![1, 1, 0, 1, 1], 4_000_000),    // FIVE
-        (3, vec![1, 1, 1, 0, 1], 4_000_000),    // FIVE
-        (4, vec![1, 1, 1, 1, 0], 4_000_000),    // FIVE
-        (1, vec![0, 0, 1, 1, 1, 0], 2_000_000), // OPEN_FOUR
-        (4, vec![0, 1, 1, 1, 0, 0], 2_000_000), // OPEN_FOUR
-        (2, vec![0, 1, 0, 1, 1, 0], 2_000_000), // OPEN_FOUR
-        (3, vec![0, 1, 1, 0, 1, 0], 2_000_000), // OPEN_FOUR
-        (1, vec![0, 0, 1, 1, 1, 2], 600_000),   // SEMIOPEN_FOUR
-        (2, vec![0, 1, 0, 1, 1, 2], 600_000),   // SEMIOPEN_FOUR
-        (3, vec![0, 1, 1, 0, 1, 2], 600_000),   // SEMIOPEN_FOUR
-        (4, vec![0, 1, 1, 1, 0, 2], 600_000),   // SEMIOPEN_FOUR
-        (4, vec![2, 1, 1, 1, 0, 0], 600_000),   // SEMIOPEN_FOUR
-        (3, vec![2, 1, 1, 0, 1, 0], 600_000),   // SEMIOPEN_FOUR
-        (2, vec![2, 1, 0, 1, 1, 0], 600_000),   // SEMIOPEN_FOUR
-        (1, vec![0, 0, 1, 1, 0], 200_000),      // OPEN_THREE
-        (2, vec![0, 1, 0, 1, 0], 200_000),      // OPEN_THREE
-        (3, vec![0, 1, 1, 0, 0], 200_000),      // OPEN_THREE
-        (2, vec![0, 1, 0, 0, 1, 0], 100_000),   // OPEN_THREE
-        (3, vec![0, 1, 0, 0, 1, 0], 100_000),   // OPEN_THREE
-        (1, vec![0, 0, 1, 1, 2], 30_000),       // SEMIOPEN_THREE
-        (2, vec![0, 1, 0, 1, 2], 30_000),       // SEMIOPEN_THREE
-        (3, vec![0, 1, 1, 0, 2], 30_000),       // SEMIOPEN_THREE
-        (3, vec![2, 1, 1, 0, 0], 30_000),       // SEMIOPEN_THREE
-        (2, vec![2, 1, 0, 1, 0], 30_000),       // SEMIOPEN_THREE
-        (1, vec![2, 0, 1, 1, 0], 30_000),       // SEMIOPEN_THREE
-        (1, vec![0, 0, 1, 0], 2_000),           // OPEN_TWO
-        (2, vec![0, 1, 0, 0], 2_000),           // OPEN_TWO
-        (1, vec![0, 0, 1, 2], 200),             // SEMIOPEN_TWO
-        (2, vec![0, 1, 0, 2], 200),             // SEMIOPEN_TWO
-        (2, vec![2, 1, 0, 0], 200),             // SEMIOPEN_TWO
-        (1, vec![2, 0, 1, 0], 200),             // SEMIOPEN_TWO
-        (1, vec![0, 0, 2], 2),                  // SEMIOPEN_ONE
-        (1, vec![2, 0, 0], 2),                  // SEMIOPEN_ONE
-      ],
+      patterns: GOMOKU_PATTERNS,
       evaluate_cache: Cache::new(0),
       shape_cache: ShapeCache::new(size),
     }
@@ -363,7 +328,16 @@ impl Board {
 
   /// Check if pattern_vec matches when "activating" (x,y),
   /// in the direction (dx,dy), if act_idx is the "activation point".
-  fn check_pattern(&self, role_val: i32, x: usize, y: usize, dx: i32, dy: i32, act_idx: i32, pattern_vec: &Vec<i32>) -> bool {
+  fn check_pattern(
+    &self,
+    role_val: i32,
+    x: usize,
+    y: usize,
+    dx: i32,
+    dy: i32,
+    act_idx: i32,
+    pattern_vec: &'static [i32],
+  ) -> bool {
     let pat_len = pattern_vec.len() as i32;
 
     for i in 0..pat_len {
@@ -372,9 +346,9 @@ impl Board {
       // Check for out of bounds
       if board_x < 0 || board_x >= self.size as i32 || board_y < 0 || board_y >= self.size as i32 {
         // Compare pattern_vec[i] with 2
-        // if pattern_vec[i as usize] != 2 {
-        return false;
-        // }
+        if pattern_vec[i as usize] != 2 {
+          return false;
+        }
       } else {
         // inside the board
         let real_val = self.board[board_x as usize + 1][board_y as usize + 1];
@@ -707,14 +681,6 @@ mod tests_pattern {
   #[test]
   fn test_check_pattern_simple() {
     let mut board = Board::new(5);
-    // Suppose we have a pattern (1, [1,1,1], cost=999)
-    // => activation_index=1, pattern_vec=[1,1,1], cost=999
-    // i.e., the activation point is the middle element of the array.
-
-    // Insert this pattern into board.patterns for testing
-    // (as if it is there)
-    let p = (1, vec![1, 1, 1], 999);
-    board.patterns.push(p);
 
     // Place white=+1 at (1,1), (1,2), (1,3)
     board.put(1, 1, Role::White);
@@ -730,8 +696,8 @@ mod tests_pattern {
       2, // x=1,y=2 — activation point (middle)
       0,
       1,
-      1, // act_idx=1
-      &vec![1, 1, 1],
+      1,                // act_idx=1
+      &[1, 1, 1, 0, 0], // Using an existing pattern from GOMOKU_PATTERNS
     );
     assert!(found, "Should detect the pattern [1,1,1] with activation in the middle");
   }

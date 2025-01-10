@@ -3,6 +3,7 @@ mod board;
 mod cache;
 mod cli;
 mod game;
+mod patterns;
 mod player;
 mod terminal_ui;
 mod zobrist_cache;
@@ -12,8 +13,8 @@ use crate::game::{Game, GameMode};
 use crate::player::{Player, PlayerType, Role};
 use clap::Parser;
 use log::info;
-use simplelog::*;
-use std::fs::File;
+// use simplelog::*;
+// use std::fs::File;
 
 fn main() {
   // Configure tracing to write to a file
@@ -25,12 +26,12 @@ fn main() {
   // tracing::subscriber::set_global_default(subscriber).expect("Setting default subscriber failed");
 
   // Initialize the logger to write to a file
-  CombinedLogger::init(vec![WriteLogger::new(
-    LevelFilter::Info,
-    Config::default(),
-    File::create("log.txt").unwrap(),
-  )])
-  .unwrap();
+  // CombinedLogger::init(vec![WriteLogger::new(
+  //   LevelFilter::Info,
+  //   Config::default(),
+  //   File::create("log.txt").unwrap(),
+  // )])
+  // .unwrap();
 
   // 1) Parse command line arguments
   let args = CliArgs::parse();
