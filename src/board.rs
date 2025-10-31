@@ -361,6 +361,101 @@ impl Board {
     true
   }
 
+  /// Get role score at position (x, y) for logging purposes
+  pub fn get_role_score(&self, role: Role, x: usize, y: usize) -> i32 {
+    self.role_scores.get(&role).map(|scores| scores[x][y]).unwrap_or(0)
+  }
+
+  /// Find all critical threats from opponent that must be defended
+  /// Returns positions where opponent would get a strong position
+  pub fn find_critical_threats(&mut self, role: Role) -> Vec<(usize, usize, i32)> {
+    let opponent = role.opponent();
+    let mut threats = Vec::new();
+
+    // Get baseline evaluation before any moves
+    let baseline_eval = self.evaluate(opponent);
+
+    // Check all empty positions by simulating opponent moves
+    for x in 0..self.size {
+      for y in 0..self.size {
+        if self.board[x + 1][y + 1] == 0 {
+          // Simulate opponent move
+          self.put(x, y, opponent);
+
+          // Check if this creates a winning position
+          if self.check_five(x, y, opponent) {
+            self.undo();
+            threats.push((x, y, 10_000_000)); // FIVE - must block immediately!
+            continue;
+          }
+
+          // Evaluate position change after opponent's move
+          let after_eval = self.evaluate(opponent);
+          let eval_gain = after_eval - baseline_eval;
+
+          // Undo the move
+          self.undo();
+
+          // Critical threats based on evaluation gain:
+          // 3M+ = Very strong position (likely four or double threat)
+          // 1M+ = Strong position (open/semi-open four)
+          // 500K+ = Moderate threat (strong three)
+          if eval_gain >= 500_000 {
+            threats.push((x, y, eval_gain));
+          }
+        }
+      }
+    }
+
+    // Sort by threat level (highest first)
+    threats.sort_by(|a, b| b.2.cmp(&a.2));
+    threats
+  }
+
+  /// Check if there's a five in a row at position (x, y) for the given role
+  fn check_five(&self, x: usize, y: usize, role: Role) -> bool {
+    let role_val = role.to_int();
+    let bx = x + 1;
+    let by = y + 1;
+
+    // Check all 4 directions
+    for &[dx, dy] in &ALL_DIRECTIONS {
+      let mut count = 1; // count the stone we just placed
+
+      // Count in positive direction
+      for step in 1..5 {
+        let nx = bx as i32 + step * dx;
+        let ny = by as i32 + step * dy;
+        if nx < 0 || nx >= (self.size + 2) as i32 || ny < 0 || ny >= (self.size + 2) as i32 {
+          break;
+        }
+        if self.board[nx as usize][ny as usize] != role_val {
+          break;
+        }
+        count += 1;
+      }
+
+      // Count in negative direction
+      for step in 1..5 {
+        let nx = bx as i32 - step * dx;
+        let ny = by as i32 - step * dy;
+        if nx < 0 || nx >= (self.size + 2) as i32 || ny < 0 || ny >= (self.size + 2) as i32 {
+          break;
+        }
+        if self.board[nx as usize][ny as usize] != role_val {
+          break;
+        }
+        count += 1;
+      }
+
+      if count >= 5 {
+        return true;
+      }
+    }
+
+    false
+  }
+
   /// Utility: get a reference to `role_scores[role][x][y]`.
   fn value_mut(&mut self, role: Role, x: usize, y: usize) -> &mut i32 {
     self

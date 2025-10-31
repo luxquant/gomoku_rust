@@ -48,7 +48,7 @@ impl AIEngine {
 
   #[instrument]
   #[allow(clippy::too_many_arguments)]
-  fn analyze(
+  pub fn analyze(
     &mut self,
     only_three: bool,
     only_four: bool,
@@ -187,8 +187,54 @@ impl AIEngine {
     // Если на доске совсем нет ходов, значит это первый ход в партии
     if board.history.is_empty() {
       let center = board.size / 2;
-      board.put(center, center, role);
       return (0, Some((center, center)), vec![]);
+    }
+
+    // CRITICAL: Check for opponent's immediate threats that must be defended
+    let threats = board.find_critical_threats(role);
+
+    if !threats.is_empty() {
+      // Check if there's a game-ending threat (4M+) or open four (2M+)
+      let highest_threat = threats[0];
+      if highest_threat.2 >= 2_000_000 {
+        // MUST defend immediately - opponent has open four or five
+        info!(
+          "CRITICAL DEFENSE: Opponent threat at ({}, {}) with score {}",
+          highest_threat.0, highest_threat.1, highest_threat.2
+        );
+
+        // But first check if we have a winning move
+        let mut path_buf = vec![];
+        let (win_value, win_move, win_path) = self.analyze(true, false, board, role, vct_depth, 0, &mut path_buf, -MAX, MAX);
+
+        if win_value >= HIGH_VALUE && win_move.is_some() {
+          // We have a winning move - take it!
+          info!("We have winning move despite threat!");
+          return (win_value, win_move, win_path);
+        }
+
+        // Otherwise, defend the critical position
+        return (highest_threat.2, Some((highest_threat.0, highest_threat.1)), vec![]);
+      } else if highest_threat.2 >= 1_000_000 {
+        // Semi-open four - very dangerous but check if we have better attack
+        info!(
+          "High threat detected at ({}, {}) with score {}",
+          highest_threat.0, highest_threat.1, highest_threat.2
+        );
+
+        let mut path_buf = vec![];
+        let (win_value, win_move, win_path) = self.analyze(true, false, board, role, vct_depth, 0, &mut path_buf, -MAX, MAX);
+
+        // Only attack if we have a clear winning sequence
+        if win_value >= HIGH_VALUE && win_move.is_some() {
+          info!("We have winning move, attacking instead of defending semi-open four");
+          return (win_value, win_move, win_path);
+        }
+
+        // Otherwise defend
+        info!("Defending semi-open four threat");
+        return (highest_threat.2, Some((highest_threat.0, highest_threat.1)), vec![]);
+      }
     }
 
     // 1) First try to analyze with (onlyThree=true, onlyFour=false)
@@ -205,9 +251,20 @@ impl AIEngine {
     let mut path_buf2 = vec![];
     let (value2, mv2, path2) = self.analyze(false, false, board, role, self.depth, 0, &mut path_buf2, -MAX, MAX);
     info!("AI 2 analyze {:?} {:?} {:?}", value2, mv2, path2);
-    value = value2;
-    mv = mv2;
-    path = path2;
+
+    // IMPROVED: Don't blindly choose Full Depth if it's worse than VCT
+    // If Full Depth gives negative evaluation but VCT gave positive, prefer VCT
+    if value2 < 0 && value >= 0 && mv.is_some() {
+      info!(
+        "Full Depth result is negative ({}), using VCT result ({}) instead",
+        value2, value
+      );
+      // Keep VCT result
+    } else {
+      value = value2;
+      mv = mv2;
+      path = path2;
+    }
 
     if mv.is_none() {
       info!("AI 3 analyze return {:?} {:?} {:?}", value, mv, path);

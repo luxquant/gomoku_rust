@@ -3,6 +3,7 @@ mod board;
 mod cache;
 mod cli;
 mod game;
+mod game_logger;
 mod patterns;
 mod player;
 mod terminal_ui;
@@ -103,5 +104,9 @@ fn main() {
   let mut game = Game::new(args.size, mode, player1, player2);
 
   // 5) Run the game loop
-  game.run();
+  if args.log {
+    game.run_with_logging();
+  } else {
+    game.run();
+  }
 }

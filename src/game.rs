@@ -1,8 +1,11 @@
 use crate::ai::AIEngine;
 use crate::board::Board;
+use crate::game_logger::GameLogger;
 use crate::player::{Player, PlayerType, Role};
 use crate::terminal_ui::{GameAction, TerminalUI};
 use log::{info, warn};
+use std::thread;
+use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameMode {
@@ -243,6 +246,109 @@ impl Game {
       self.ui.show_message("0 wins!");
     } else {
       self.ui.show_message("X wins!");
+    }
+  }
+
+  pub fn run_with_logging(&mut self) {
+    let mut logger = GameLogger::new("gomoku_game.log").expect("Failed to create log file");
+
+    println!("Starting AI vs AI game with logging...");
+    println!("Log file: gomoku_game.log");
+    println!("Board size: {}", self.board.size);
+    println!("AI depth: {}", self.player1.depth);
+    println!();
+
+    loop {
+      let player = if self.current_role == self.player1.role {
+        &self.player1
+      } else {
+        &self.player2
+      };
+
+      logger.log_move_start(self.current_role, self.round).ok();
+      logger.log_board_state(&self.board).ok();
+
+      println!("Move #{} - {:?} thinking...", self.round, self.current_role);
+
+      match player.player_type {
+        PlayerType::AI => {
+          self.ai_turn_with_logging(&mut logger);
+        }
+        PlayerType::Human => {
+          panic!("Log mode only supports AI vs AI");
+        }
+      }
+
+      // Check game over
+      if self.board.is_game_over() {
+        let winner = self.board.get_winner();
+        logger.log_board_state(&self.board).ok();
+        logger.log_game_end(winner, self.round).ok();
+
+        println!("\nGame Over!");
+        match winner {
+          0 => println!("Result: DRAW"),
+          1 => println!("Result: WHITE (O) WINS!"),
+          -1 => println!("Result: BLACK (X) WINS!"),
+          _ => println!("Result: UNKNOWN"),
+        }
+        println!("Total moves: {}", self.round);
+        println!("\nSee gomoku_game.log for detailed analysis.");
+        break;
+      }
+
+      // Switch turn
+      self.current_role = self.current_role.opponent();
+      self.round += 1;
+
+      // Small delay for readability
+      thread::sleep(Duration::from_millis(100));
+    }
+  }
+
+  fn ai_turn_with_logging(&mut self, logger: &mut GameLogger) {
+    let ai = if self.current_role == self.player1.role {
+      &mut self.ai1
+    } else {
+      &mut self.ai2
+    };
+
+    // Get candidates before make_move
+    let candidates = self.board.get_valuable_moves(self.current_role, 0, false, false);
+    logger.log_candidates(&candidates, self.current_role).ok();
+
+    // IMPORTANT: Use make_move which includes threat detection logic
+    let (final_value, final_move, _final_path) = ai.make_move(&mut self.board, self.current_role);
+
+    // Determine reason based on value
+    let reason = if final_value >= 10_000_000 {
+      "Winning move (FIVE)"
+    } else if final_value >= crate::ai::HIGH_VALUE {
+      "VCT WIN"
+    } else if final_value >= 2_000_000 {
+      "Strong attack or critical defense"
+    } else if final_value < 0 {
+      "Defensive/forced move"
+    } else {
+      "Standard full-depth search result"
+    };
+
+    if let Some((x, y)) = final_move {
+      logger.log_patterns(x, y, self.current_role, &self.board).ok();
+      logger.log_final_decision(final_move, final_value, reason).ok();
+      logger
+        .log_cache_stats(ai.cache_hits.hit, ai.cache_hits.total, ai.cache_hits.search)
+        .ok();
+
+      println!("  -> Move: ({}, {}) Score: {} [{}]", x, y, final_value, reason);
+
+      // Place the stone on the board
+      self.board.put(x, y, self.current_role);
+      self.last_stone_x = Some(x);
+      self.last_stone_y = Some(y);
+    } else {
+      logger.log_final_decision(None, final_value, "No valid moves found").ok();
+      println!("  -> No valid moves");
     }
   }
 }

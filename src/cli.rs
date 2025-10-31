@@ -37,4 +37,8 @@ pub struct CliArgs {
   /// First player in Human vs AI mode
   #[arg(long, value_enum, default_value_t=FirstPlayerArg::Human)]
   pub first_player: FirstPlayerArg,
+
+  /// Enable logging to file instead of TUI
+  #[arg(long)]
+  pub log: bool,
 }
